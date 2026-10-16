@@ -1,0 +1,138 @@
+local t = dofile("tests/helpers.lua")
+
+-- A small in-process LSP transport: tests native attachment without requiring
+-- a server binary, Ansible, Python, a plugin manager, or network access.
+local starts = 0
+local function transport(dispatchers)
+  starts = starts + 1
+  local closing, request_id = false, 0
+  return {
+    request = function(method, _, callback)
+      request_id = request_id + 1
+      vim.schedule(function()
+        callback(nil, method == "initialize" and {
+          capabilities = { textDocumentSync = 1 },
+        } or nil)
+      end)
+      return true, request_id
+    end,
+    notify = function(method)
+      if method == "exit" then
+        closing = true
+        vim.schedule(function()
+          dispatchers.on_exit(0, 0)
+        end)
+      end
+      return true
+    end,
+    is_closing = function()
+      return closing
+    end,
+    terminate = function()
+      closing = true
+      vim.schedule(function()
+        dispatchers.on_exit(0, 0)
+      end)
+    end,
+  }
+end
+
+t.run(function()
+  for _, path in ipairs(vim.fn.glob("**/*.lua", false, true)) do
+    assert(loadfile(path))
+  end
+
+  local zals = require("zals")
+  zals.setup({ enabled = false, filetype_detection = false })
+  t.equal(package.loaded["zals.filetypes"], nil, "detection can be skipped")
+  local config = vim.lsp.config.zals
+  t.equal(config.cmd, { "zals", "--stdio" })
+  t.equal(config.filetypes, { "yaml.ansible", "jinja2" })
+  t.equal(config.root_markers, { ".git" })
+  t.equal(config.cmd_env, nil, "do not override collection paths")
+  t.equal(config.settings.ansible.python.venvPath, ".venv")
+  t.equal(config.settings.ansible.validation.lint.autoFixOnSave, false)
+
+  vim.lsp.config("zals", { cmd = transport })
+  t.open(t.root .. "/configuration-only.yml")
+  vim.bo.filetype = "yaml.ansible"
+  vim.wait(100)
+  t.equal(starts, 0, "configuration-only mode must not start a client")
+
+  zals.setup({
+    enabled = false,
+    filetype_detection = { filename = { ["deploy.yaml"] = "yaml.ansible" } },
+    lsp = {
+      cmd = { "/custom/zals", "--stdio", "--venv", ".venv-ansible" },
+      filetypes = { "yaml.ansible" },
+      settings = { ansible = { validation = { enabled = false } } },
+    },
+  })
+  t.equal(vim.lsp.config.zals.cmd, { "/custom/zals", "--stdio", "--venv", ".venv-ansible" })
+  t.equal(vim.lsp.config.zals.filetypes, { "yaml.ansible" }, "list overrides replace defaults")
+  t.equal(vim.lsp.config.zals.settings.ansible.validation.enabled, false)
+  t.equal(vim.lsp.config.zals.settings.ansible.completion.provideModuleOptionAliases, true)
+  vim.lsp.config("zals", { cmd = transport })
+  t.open(t.root .. "/deploy.yaml", "yaml.ansible")
+  vim.wait(100)
+  t.equal(starts, 0, "overrides must not implicitly enable the server")
+
+  zals.setup({ lsp = { cmd = transport, filetypes = { "yaml.ansible", "jinja2" } } })
+  t.client(t.open(t.root .. "/site.yaml", "yaml.ansible"))
+
+  -- A nearer ansible.cfg must not shrink the Git workspace.
+  t.write(t.root .. "/nested/ansible.cfg", { "[defaults]" })
+  for _, ext in ipairs({ "yml", "yaml" }) do
+    local paths = {
+      "requirements." .. ext,
+      "execution-environment." .. ext,
+      "galaxy." .. ext,
+      "site." .. ext,
+      "nested/playbooks/deploy." .. ext,
+      "roles/web/defaults/main/settings." .. ext,
+      "roles/web/vars/main." .. ext,
+      "roles/web/tasks/nested/configure." .. ext,
+      "ansible_collections/acme/demo/galaxy." .. ext,
+      "ansible_collections/acme/demo/roles/web/vars/main." .. ext,
+    }
+    -- Standalone roles: both metadata extensions, nested variable directories.
+    local standalone = t.root .. "/standalone-" .. ext
+    t.write(standalone .. "/meta/main." .. ext, { "galaxy_info: {}" })
+    for _, dir in ipairs({ "defaults", "vars", "tasks", "handlers", "meta", "templates" }) do
+      paths[#paths + 1] = "standalone-" .. ext .. "/" .. dir .. "/nested/main." .. ext
+    end
+    for _, path in ipairs(paths) do
+      local bufnr = t.open(t.root .. "/" .. path, "yaml.ansible")
+      local client = t.client(bufnr)
+      t.equal(client.config.root_dir, t.root, "Git workspace root")
+    end
+    local bufnr = t.open(standalone .. "/templates/nested/config.j2", "jinja2")
+    t.client(bufnr)
+  end
+  t.client(t.open(t.root .. "/roles/web/templates/nested/app.conf.j2", "jinja2"))
+  t.client(t.open(t.root .. "/ansible_collections/acme/demo/roles/web/templates/app.j2", "jinja2"))
+  t.client(t.open(t.root .. "/deploy.yaml", "yaml.ansible"))
+  t.equal(starts, 1, "reuse the server in one workspace")
+
+  for _, path in ipairs({
+    ".github/workflows/ci.yml",
+    "ordinary.yaml",
+    "templates/settings.yml",
+    "vars/main.yaml",
+    "defaults/main.yml",
+    "tasks/settings.yml",
+    "handlers/main.yaml",
+  }) do
+    local bufnr = t.open(t.root .. "/" .. path, "yaml")
+    vim.wait(50)
+    t.equal(#vim.lsp.get_clients({ bufnr = bufnr, name = "zals" }), 0, path .. ": no zals")
+  end
+  local bufnr = t.open(t.temp .. "/loose/site.yml", "yaml.ansible")
+  t.client(bufnr)
+  t.equal(starts, 2, "single-file support without a Git root")
+
+  -- Repeating setup must not create duplicate clients.
+  zals.setup()
+  t.client(bufnr)
+  t.equal(starts, 2)
+end)
