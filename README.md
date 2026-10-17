@@ -8,7 +8,9 @@ nvim-lspconfig, Mason, or a plugin manager.
   standalone role repositories and nested `defaults/main/` and `vars/main/`.
 - Jinja template detection inside roles.
 - LSP defaults for completion, hover, diagnostics, symbols, navigation, and code
-  actions. Feature implementation lives in the server, not this plugin.
+  actions, plus interactive prompts (`vim.ui.input` and `vim.ui.select`) for
+  `:ZalsCreateRole` and `Extract task(s) to include_role...` / `import_role...`.
+  Feature implementation lives in the server, not this plugin.
 
 ## Requirements
 
@@ -205,6 +207,23 @@ checkout. If needed, set `lsp.cmd_env` explicitly.
 `zals --venv <path>` takes precedence. Selecting a venv controls collection
 lookup, **not** Python activation or the `ansible-doc` executable. See the
 [server's selected-environment guide](https://github.com/kksat/zals/blob/main/docs/selected-venv-collections.md).
+
+### Role creation and extraction
+
+`zals.nvim` registers `:ZalsCreateRole` (`require("zals").create_role()`) and
+client command handlers for `zals.extractToRole` and `zals.createRole`:
+
+- **Unresolved role reference (`roles:`, `include_role`, `import_role`):** use
+  `:lua vim.lsp.buf.code_action()` on the role name to create the role in
+  `./roles/<name>` or in any Workspace collection's `roles/<name>` directory.
+- **Extract task(s) to a role:** select one or more tasks and choose
+  `Extract task(s) to include_role...` or `Extract task(s) to import_role...`
+  from `:lua vim.lsp.buf.code_action()`. Neovim prompts for the short role name
+  (`^[a-z][a-z0-9_]*$`, no dots) and target `roles/` directory (`./roles` or a
+  Workspace collection's `roles/` folder).
+- **Create a role explicitly:** run `:ZalsCreateRole` in an Ansible buffer to
+  prompt for the role name and destination `roles/` folder and open the new
+  `tasks/main.yml`.
 
 ### Other language servers
 

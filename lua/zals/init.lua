@@ -17,10 +17,22 @@ function M.setup(opts)
     vim.filetype.add(vim.tbl_deep_extend("force", require("zals.filetypes"), opts.filetype_detection or {}))
   end
 
+  local commands = require("zals.commands")
+  for name, handler in pairs(commands.commands) do
+    vim.lsp.commands[name] = handler
+  end
+  vim.api.nvim_create_user_command("ZalsCreateRole", function()
+    commands.create_role()
+  end, { desc = "Create a new Ansible role with zals" })
+
   vim.lsp.config("zals", opts.lsp or {})
   if opts.enabled ~= false then
     vim.lsp.enable("zals")
   end
+end
+
+function M.create_role(bufnr)
+  return require("zals.commands").create_role(bufnr)
 end
 
 return M

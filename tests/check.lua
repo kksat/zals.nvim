@@ -3,16 +3,35 @@ local t = dofile("tests/helpers.lua")
 -- A small in-process LSP transport: tests native attachment without requiring
 -- a server binary, Ansible, Python, a plugin manager, or network access.
 local starts = 0
+local executed_commands = {}
+local mock_candidates = {}
 local function transport(dispatchers)
   starts = starts + 1
   local closing, request_id = false, 0
   return {
-    request = function(method, _, callback)
+    request = function(method, params, callback)
       request_id = request_id + 1
       vim.schedule(function()
-        callback(nil, method == "initialize" and {
-          capabilities = { textDocumentSync = 1 },
-        } or nil)
+        if method == "initialize" then
+          callback(nil, {
+            capabilities = {
+              textDocumentSync = 1,
+              executeCommandProvider = { commands = { "zals.createRole", "zals.extractToRole" } },
+            },
+          })
+          return
+        end
+        if method == "workspace/executeCommand" then
+          executed_commands[#executed_commands + 1] = params
+          local arg = params.arguments and params.arguments[1] or {}
+          if params.command == "zals.createRole" and not arg.name then
+            callback(nil, { candidates = mock_candidates })
+            return
+          end
+          callback(nil, { ok = true })
+          return
+        end
+        callback(nil, nil)
       end)
       return true, request_id
     end,
@@ -135,4 +154,69 @@ t.run(function()
   zals.setup()
   t.client(bufnr)
   t.equal(starts, 2)
+
+  -- Role name validation and interactive command handlers (zals.extractToRole, :ZalsCreateRole).
+  local cmds = require("zals.commands")
+  local valid_name, valid_err = cmds.validate_role_name("web_server_1")
+  t.equal(valid_name, "web_server_1")
+  t.equal(valid_err, nil)
+  t.equal((cmds.validate_role_name("")), nil, "empty role name rejected")
+  t.equal((cmds.validate_role_name("acme.web.role")), nil, "dotted role name rejected")
+  t.equal((cmds.validate_role_name("bad-role")), nil, "hyphenated role name rejected")
+
+  local orig_input, orig_select = vim.ui.input, vim.ui.select
+  local next_input, next_select_idx = "webserver", 2
+  vim.ui.input = function(_, on_confirm)
+    on_confirm(next_input)
+  end
+  vim.ui.select = function(items, _, on_choice)
+    on_choice(items[next_select_idx])
+  end
+
+  local active_client = t.client(bufnr)
+  executed_commands = {}
+  mock_candidates = {
+    { dir = t.root .. "/roles", label = "./roles", displayDir = "./roles", collection = vim.NIL },
+    {
+      dir = t.root .. "/ansible_collections/acme/demo/roles",
+      label = "acme.demo (ansible_collections/acme/demo/roles)",
+      displayDir = "ansible_collections/acme/demo/roles",
+      collection = "acme.demo",
+    },
+  }
+
+  active_client:exec_cmd({
+    title = "Extract task to include_role...",
+    command = "zals.extractToRole",
+    arguments = {
+      {
+        uri = vim.uri_from_bufnr(bufnr),
+        keyword = "include_role",
+        candidates = mock_candidates,
+      },
+    },
+  }, { bufnr = bufnr, client_id = active_client.id })
+
+  assert(vim.wait(1000, function()
+    return #executed_commands == 1
+  end), "zals.extractToRole should forward workspace/executeCommand after prompting")
+  t.equal(executed_commands[1].command, "zals.extractToRole")
+  t.equal(executed_commands[1].arguments[1].name, "webserver")
+  t.equal(executed_commands[1].arguments[1].targetDir, t.root .. "/ansible_collections/acme/demo/roles")
+  t.equal(executed_commands[1].arguments[1].collection, "acme.demo")
+
+  next_input, next_select_idx = "db_role", 1
+  executed_commands = {}
+  vim.cmd("ZalsCreateRole")
+  assert(vim.wait(1000, function()
+    return #executed_commands == 2
+  end), ":ZalsCreateRole should query candidates then execute zals.createRole")
+  t.equal(executed_commands[1].command, "zals.createRole")
+  t.equal(executed_commands[1].arguments[1].name, nil)
+  t.equal(executed_commands[2].command, "zals.createRole")
+  t.equal(executed_commands[2].arguments[1].name, "db_role")
+  t.equal(executed_commands[2].arguments[1].targetDir, t.root .. "/roles")
+  t.equal(executed_commands[2].arguments[1].collection, nil)
+
+  vim.ui.input, vim.ui.select = orig_input, orig_select
 end)

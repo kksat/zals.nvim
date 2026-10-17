@@ -4,6 +4,7 @@ return {
   cmd = { "zals", "--stdio" },
   filetypes = { "yaml.ansible", "jinja2" },
   root_markers = { ".git" },
+  commands = require("zals.commands").commands,
   settings = {
     ansible = {
       ansible = {

@@ -74,4 +74,53 @@ t.run(function()
   local bufnr = t.open(t.root .. "/ordinary.yml", "yaml")
   vim.wait(100)
   t.equal(#vim.lsp.get_clients({ bufnr = bufnr, name = "zals" }), 0)
+
+  -- Interactive role extraction with a real zals server.
+  local playbook = t.root .. "/site.yml"
+  t.write(playbook, {
+    "- hosts: all",
+    "  tasks:",
+    "    - name: Configure service",
+    "      ansible.builtin.debug:",
+    "        msg: hello",
+  })
+  vim.cmd.edit(vim.fn.fnameescape(playbook))
+  local pb_buf = vim.api.nvim_get_current_buf()
+  local pb_client = t.client(pb_buf)
+
+  local ca_resp, ca_err = pb_client:request_sync("textDocument/codeAction", {
+    textDocument = { uri = vim.uri_from_fname(playbook) },
+    range = {
+      start = { line = 2, character = 6 },
+      ["end"] = { line = 2, character = 6 },
+    },
+    context = { diagnostics = {} },
+  }, 10000, pb_buf)
+  assert(ca_resp and not ca_resp.err, vim.inspect(ca_err or ca_resp))
+
+  local extract_role_action
+  for _, act in ipairs(ca_resp.result or {}) do
+    if act.command and act.command.command == "zals.extractToRole" and act.title:find("include_role", 1, true) then
+      extract_role_action = act
+      break
+    end
+  end
+  assert(extract_role_action, "expected Extract task to include_role... action")
+
+  local orig_input, orig_select = vim.ui.input, vim.ui.select
+  vim.ui.input = function(_, on_confirm)
+    on_confirm("extracted_web")
+  end
+  vim.ui.select = function(items, _, on_choice)
+    on_choice(items[1])
+  end
+
+  pb_client:exec_cmd(extract_role_action.command, { bufnr = pb_buf, client_id = pb_client.id })
+  assert(vim.wait(5000, function()
+    return vim.fn.filereadable(t.root .. "/roles/extracted_web/tasks/main.yml") == 1
+  end), "extracted role tasks/main.yml was not created")
+  t.equal(vim.fn.filereadable(t.root .. "/roles/extracted_web/meta/argument_specs.yml"), 1)
+  t.equal(vim.fn.filereadable(t.root .. "/roles/extracted_web/handlers/main.yml"), 0)
+
+  vim.ui.input, vim.ui.select = orig_input, orig_select
 end)
