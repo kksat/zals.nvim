@@ -67,7 +67,7 @@ t.run(function()
   env.NVIM = t.temp .. "/nvim.sock"
   env.NVIM_BIN = nil
   env.MAKEFLAGS, env.MFLAGS, env.MAKELEVEL = nil, nil, nil
-  for _, target in ipairs({ "check", "integration" }) do
+  for _, target in ipairs({ "check", "test", "check-all", "integration", "integrations" }) do
     for _, binary in ipairs({ "nvim", "/custom/neovim" }) do
       local args = { "make", "--no-print-directory", "--dry-run", target }
       if binary ~= "nvim" then

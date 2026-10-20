@@ -278,7 +278,11 @@ has additional details on navigation and filetype detection.
 ```sh
 make check
 make integration ZALS_BIN=/absolute/path/to/zals
+make check-all ZALS_BIN=/absolute/path/to/zals
 ```
+
+`make check-all` runs both suites. `make integrations` is an alias for
+`make integration`. Without `ZALS_BIN`, integration uses `zals` from `PATH`.
 
 `make check` checks Lua syntax, default/overridden configuration, filetypes,
 and automatic attachment using an in-process LSP transport. It requires only
