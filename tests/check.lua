@@ -61,6 +61,26 @@ t.run(function()
     assert(loadfile(path))
   end
 
+  -- Neovim terminals export NVIM as a server socket, not an executable.
+  -- Exercise Make's variable resolution without recursively running tests.
+  local env = vim.fn.environ()
+  env.NVIM = t.temp .. "/nvim.sock"
+  env.NVIM_BIN = nil
+  env.MAKEFLAGS, env.MFLAGS, env.MAKELEVEL = nil, nil, nil
+  for _, target in ipairs({ "check", "integration" }) do
+    for _, binary in ipairs({ "nvim", "/custom/neovim" }) do
+      local args = { "make", "--no-print-directory", "--dry-run", target }
+      if binary ~= "nvim" then
+        args[#args + 1] = "NVIM_BIN=" .. binary
+      end
+      local result = vim.system(args, { env = env, clear_env = true }):wait()
+      t.equal(result.code, 0, result.stderr)
+      t.equal(result.stdout:find(env.NVIM, 1, true), nil, target .. ": must not execute the NVIM socket")
+      t.equal(result.stdout:find(binary .. " --headless", 1, true) ~= nil, true,
+        target .. ": select the default binary or explicit NVIM_BIN override")
+    end
+  end
+
   local zals = require("zals")
   zals.setup({ enabled = false, filetype_detection = false })
   t.equal(package.loaded["zals.filetypes"], nil, "detection can be skipped")

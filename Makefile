@@ -1,4 +1,5 @@
-NVIM ?= nvim
+# NVIM is Neovim's server socket in terminal jobs, not an executable.
+NVIM_BIN ?= nvim
 ZALS_BIN ?= zals
 
 .PHONY: help check test integration
@@ -9,9 +10,9 @@ help:
 
 check:
 	git diff --check
-	$(NVIM) --headless -u NONE -i NONE -n -l tests/check.lua
+	$(NVIM_BIN) --headless -u NONE -i NONE -n -l tests/check.lua
 
 test: check
 
 integration:
-	ZALS_BIN="$(ZALS_BIN)" $(NVIM) --headless -u NONE -i NONE -n -l tests/integration.lua
+	ZALS_BIN="$(ZALS_BIN)" $(NVIM_BIN) --headless -u NONE -i NONE -n -l tests/integration.lua

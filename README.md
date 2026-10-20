@@ -288,7 +288,10 @@ Neovim 0.11.0 and stable.
 The optional integration test uses a real ZALS process to check references
 from collection and standalone role variable keys, both YAML extensions,
 Jinja attachment, and ordinary YAML exclusion. It needs no Galaxy downloads
-or playbook execution. Override `NVIM` to test another Neovim executable.
+or playbook execution. Use `make check NVIM_BIN=/path/to/nvim` to test another
+Neovim executable (the same override works for `make integration`). `NVIM_BIN`
+is separate from `NVIM`, which Neovim exports as its server socket in terminal
+jobs; both targets can be run from a Neovim terminal.
 
 ## License
 
