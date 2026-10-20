@@ -67,7 +67,7 @@ t.run(function()
   env.NVIM = t.temp .. "/nvim.sock"
   env.NVIM_BIN = nil
   env.MAKEFLAGS, env.MFLAGS, env.MAKELEVEL = nil, nil, nil
-  for _, target in ipairs({ "check", "test", "check-all", "integration", "integrations" }) do
+  for _, target in ipairs({ "check", "test", "check-all", "integration", "integrations", "integration-roles" }) do
     for _, binary in ipairs({ "nvim", "/custom/neovim" }) do
       local args = { "make", "--no-print-directory", "--dry-run", target }
       if binary ~= "nvim" then
@@ -75,6 +75,10 @@ t.run(function()
       end
       local result = vim.system(args, { env = env, clear_env = true }):wait()
       t.equal(result.code, 0, result.stderr)
+      if target == "integration-roles" then
+        t.equal(result.stdout:find("ZALS_REQUIRE_ROLES=1", 1, true) ~= nil, true,
+          "strict role integration must reject unsupported servers")
+      end
       t.equal(result.stdout:find(env.NVIM, 1, true), nil, target .. ": must not execute the NVIM socket")
       t.equal(result.stdout:find(binary .. " --headless", 1, true) ~= nil, true,
         target .. ": select the default binary or explicit NVIM_BIN override")

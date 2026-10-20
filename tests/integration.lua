@@ -87,7 +87,23 @@ t.run(function()
   vim.cmd.edit(vim.fn.fnameescape(playbook))
   local pb_buf = vim.api.nvim_get_current_buf()
   local pb_client = t.client(pb_buf)
+  local provider = pb_client.server_capabilities.executeCommandProvider or {}
+  local missing = {}
+  for _, command in ipairs({ "zals.createRole", "zals.extractToRole" }) do
+    if not vim.tbl_contains(provider.commands or {}, command) then
+      missing[#missing + 1] = command
+    end
+  end
+  if #missing > 0 then
+    local reason = binary .. " does not advertise " .. table.concat(missing, ", ")
+    assert(vim.env.ZALS_REQUIRE_ROLES ~= "1", reason
+      .. "; set ZALS_BIN to a server build with role commands")
+    print("SKIP role integration: " .. reason .. " (navigation checks passed)")
+    return
+  end
 
+  -- Advertising role commands commits the server to these assertions: a
+  -- missing action or failed edit remains a failure, never an optional skip.
   local ca_resp, ca_err = pb_client:request_sync("textDocument/codeAction", {
     textDocument = { uri = vim.uri_from_fname(playbook) },
     range = {

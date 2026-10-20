@@ -221,6 +221,11 @@ lookup, **not** Python activation or the `ansible-doc` executable. See the
 
 ### Role creation and extraction
 
+These features require a server advertising `zals.createRole` and
+`zals.extractToRole`. The Homebrew 0.1.0 server does not advertise them;
+install a role-enabled server build to use them. Other plugin features remain
+available with that release.
+
 `zals.nvim` registers `:ZalsCreateRole` (`require("zals").create_role()`) and
 client command handlers for `zals.extractToRole` and `zals.createRole`:
 
@@ -289,10 +294,24 @@ and automatic attachment using an in-process LSP transport. It requires only
 Neovim and Git, not your personal config or external plugins. CI runs it on
 Neovim 0.11.0 and stable.
 
-The optional integration test uses a real ZALS process to check references
-from collection and standalone role variable keys, both YAML extensions,
-Jinja attachment, and ordinary YAML exclusion. It needs no Galaxy downloads
-or playbook execution. Use `make check NVIM_BIN=/path/to/nvim` to test another
+The integration test uses a real ZALS process to check references from
+collection and standalone role variable keys, both YAML extensions, Jinja
+attachment, and ordinary YAML exclusion. It also tests role extraction when
+the server advertises both role commands. Older servers (including Homebrew
+0.1.0) print an explicit `SKIP role integration` after passing navigation
+checks. A server that advertises the commands must pass the role assertions;
+missing actions and failed edits are never skipped.
+
+To require role integration with **no skips**, select a role-enabled build:
+
+```sh
+make integration-roles ZALS_BIN=/absolute/path/to/role-enabled/zals
+```
+
+This target fails with a capability error if the selected binary lacks the
+commands, rather than silently choosing a personal development checkout.
+Neither suite needs Galaxy downloads or playbook execution.
+Use `make check NVIM_BIN=/path/to/nvim` to test another
 Neovim executable (the same override works for `make integration`). `NVIM_BIN`
 is separate from `NVIM`, which Neovim exports as its server socket in terminal
 jobs; both targets can be run from a Neovim terminal.
