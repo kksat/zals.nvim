@@ -15,6 +15,7 @@ nvim-lspconfig, Mason, or a plugin manager.
 ## Requirements
 
 - **Neovim 0.11+**.
+- **Git** to install and update the plugin.
 - **zals**, installed separately and available to the Neovim process.
 - Ansible tools (`ansible`, `ansible-config`, `ansible-doc`, `ansible-playbook`)
   for module documentation, discovery, and validation.
@@ -53,31 +54,42 @@ ansible-doc --version
 
 For remote Neovim sessions, install the tools on the remote host.
 
-## Install the plugin locally (before publication)
+## Install the plugin
 
-This repository can be used without a GitHub remote. With the checkout at
-`~/dev/zals.nvim`, add this lazy.nvim spec:
+### lazy.nvim
+
+Add this spec to your plugin list. lazy.nvim clones `kksat/zals.nvim` from
+GitHub and manages updates, just like your other plugins:
 
 ```lua
 {
-  dir = vim.fn.expand("~/dev/zals.nvim"),
-  name = "zals.nvim",
+  "kksat/zals.nvim",
   main = "zals",
   lazy = false, -- register filetype rules before opening buffers
   opts = {},
 }
 ```
 
-Without a plugin manager, add to `init.lua` before opening files:
+Run `:Lazy sync` and restart Neovim. No local development checkout is needed.
+The ZALS server executable is installed separately as described above.
+
+### Native packages (without a plugin manager)
+
+Clone the plugin into Neovim's package directory (default Unix layout):
+
+```sh
+git clone https://github.com/kksat/zals.nvim.git \
+  "${XDG_DATA_HOME:-$HOME/.local/share}/nvim/site/pack/plugins/start/zals.nvim"
+```
+
+Add to `init.lua` before opening files:
 
 ```lua
-vim.opt.runtimepath:prepend(vim.fn.expand("~/dev/zals.nvim"))
+vim.cmd.packadd("zals.nvim")
 require("zals").setup()
 ```
 
-After the repository is published as `kksat/zals.nvim`, the lazy.nvim spec can
-use `"kksat/zals.nvim"` instead of `dir` and `name`. Keep `main`, `lazy`, and
-`opts`. The examples here do not require publication.
+Update the package with `git pull --ff-only` from its cloned directory.
 
 ## LazyVim
 
@@ -89,8 +101,7 @@ through its `servers` table:
 ```lua
 return {
   {
-    dir = vim.fn.expand("~/dev/zals.nvim"),
-    name = "zals.nvim",
+    "kksat/zals.nvim",
     main = "zals",
     lazy = false,
     opts = { enabled = false }, -- LazyVim enables it below
