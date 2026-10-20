@@ -291,8 +291,9 @@ make check-all ZALS_BIN=/absolute/path/to/zals
 
 `make check` checks Lua syntax, default/overridden configuration, filetypes,
 and automatic attachment using an in-process LSP transport. It requires only
-Neovim and Git, not your personal config or external plugins. CI runs it on
-Neovim 0.11.0 and stable.
+Neovim and Git, not your personal config or external plugins. CI runs
+`make check-all` on Neovim 0.11.0 and stable with the released `zals==0.1.0`
+Python package, so both unit and release-compatible integration checks run.
 
 The integration test uses a real ZALS process to check references from
 collection and standalone role variable keys, both YAML extensions, Jinja
